@@ -1,242 +1,205 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Voice Notes App',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.amber),
         useMaterial3: true,
       ),
-      home: const AuthPage(),
+      home: const LoginPage(),
     );
   }
 }
 
-// --- 1. AUTH OLDAL ---
-class AuthPage extends StatefulWidget {
-  const AuthPage({super.key});
-
+// --- BEJELENTKEZÉS ÉS REGISZTRÁCIÓ ---
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
   @override
-  State<AuthPage> createState() => _AuthPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _AuthPageState extends State<AuthPage> {
-  final TextEditingController _userController = TextEditingController();
-  final TextEditingController _passController = TextEditingController();
-  bool _isLoading = false;
+class _LoginPageState extends State<LoginPage> {
+  final _userController = TextEditingController();
+  final _passController = TextEditingController();
+  bool _isLogin = true;
 
-  // Web/Chrome: http://localhost:3000 | Android Emulátor: http://10.0.2.2:3000
-  final String baseUrl = '  https://conception-tinglier-cyclonically.ngrok-free.dev ';
+  void _handleAuth() async {
+    final user = _userController.text.trim();
+    final pass = _passController.text.trim();
+    if (user.isEmpty || pass.isEmpty) return;
 
-  Future<void> _authenticate(String type) async {
-    if (_userController.text.isEmpty || _passController.text.isEmpty) return;
-    setState(() => _isLoading = true);
+    final prefs = await SharedPreferences.getInstance();
 
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/$type'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "username": _userController.text,
-          "password": _passController.text,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        if (type == 'login') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NotesPage(userId: data['user']['id'], baseUrl: baseUrl)
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sikeres regisztráció! Lépj be!")));
-        }
+    if (_isLogin) {
+      String? storedPass = prefs.getString('user_$user');
+      if (storedPass == pass) {
+        if (!mounted) return;
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => BeehiveListPage(username: user)));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['error'] ?? "Hiba történt")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hibás adatok!")));
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Szerver hiba!")));
-    } finally {
-      setState(() => _isLoading = false);
+    } else {
+      await prefs.setString('user_$user', pass);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sikeres regisztráció!")));
+      setState(() => _isLogin = true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Belépés")),
-      body: Padding(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          children: [
-            TextField(controller: _userController, decoration: const InputDecoration(labelText: "Felhasználónév", prefixIcon: Icon(Icons.person))),
-            TextField(controller: _passController, obscureText: true, decoration: const InputDecoration(labelText: "Jelszó", prefixIcon: Icon(Icons.lock))),
-            const SizedBox(height: 30),
-            if (_isLoading) const CircularProgressIndicator()
-            else ...[
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () => _authenticate('login'), child: const Text("BELÉPÉS"))),
-              TextButton(onPressed: () => _authenticate('register'), child: const Text("Regisztráció")),
-            ]
-          ],
+      backgroundColor: Colors.amber[50],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Icon(Icons.hive_rounded, size: 100, color: Colors.amber),
+              const SizedBox(height: 20),
+              Text(_isLogin ? "Belépés" : "Regisztráció", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 30),
+              TextField(controller: _userController, decoration: const InputDecoration(labelText: "Felhasználónév", border: OutlineInputBorder())),
+              const SizedBox(height: 15),
+              TextField(controller: _passController, obscureText: true, decoration: const InputDecoration(labelText: "Jelszó", border: OutlineInputBorder())),
+              const SizedBox(height: 25),
+              ElevatedButton(
+                onPressed: _handleAuth,
+                style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: Colors.amber[700], foregroundColor: Colors.white),
+                child: Text(_isLogin ? "BELÉPÉS" : "REGISZTRÁCIÓ"),
+              ),
+              TextButton(onPressed: () => setState(() => _isLogin = !_isLogin), child: Text(_isLogin ? "Regisztráció" : "Vissza a belépéshez")),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// --- 2. JEGYZETELŐ OLDAL HANGGAL ---
-class NotesPage extends StatefulWidget {
-  final int userId;
-  final String baseUrl;
-  const NotesPage({super.key, required this.userId, required this.baseUrl});
-
+// --- KAPTÁR LISTA ---
+class BeehiveListPage extends StatefulWidget {
+  final String username;
+  const BeehiveListPage({super.key, required this.username});
   @override
-  State<NotesPage> createState() => _NotesPageState();
+  State<BeehiveListPage> createState() => _BeehiveListPageState();
 }
 
-class _NotesPageState extends State<NotesPage> {
-  List notes = [];
-  final TextEditingController _noteController = TextEditingController();
-  
-  // Hangfelismerés setup
-  late stt.SpeechToText _speech;
-  bool _isListening = false;
+class _BeehiveListPageState extends State<BeehiveListPage> {
+  List<String> hives = [];
 
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
-    _fetchNotes();
+    _loadData();
   }
 
-  // DIKTÁLÁS FUNKCIÓ
-  void _listen() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (status) => print('Státusz: $status'),
-        onError: (error) => print('Hiba: $error'),
-      );
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          onResult: (result) {
-            setState(() {
-              _noteController.text = result.recognizedWords;
-            });
-          },
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
+  void _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      hives = prefs.getStringList('hives_${widget.username}') ?? [];
+    });
   }
 
-  Future<void> _fetchNotes() async {
-    try {
-      final response = await http.get(Uri.parse('${widget.baseUrl}/notes/${widget.userId}'));
-      if (response.statusCode == 200) {
-        setState(() => notes = jsonDecode(response.body));
-      }
-    } catch (e) {
-      print("Hiba a lekérésnél: $e");
-    }
-  }
-
-  Future<void> _addNote() async {
-    if (_noteController.text.isEmpty) return;
-    try {
-      final response = await http.post(
-        Uri.parse('${widget.baseUrl}/notes'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "userId": widget.userId,
-          "title": "Jegyzet",
-          "content": _noteController.text,
-        }),
-      );
-      if (response.statusCode == 200) {
-        _noteController.clear();
-        _fetchNotes();
-      }
-    } catch (e) {
-      print("Hiba a mentésnél: $e");
-    }
+  void _addHive() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      hives.add("${hives.length + 1}. sz. Kaptár");
+      prefs.setStringList('hives_${widget.username}', hives);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Jegyzeteim"),
-        actions: [IconButton(icon: const Icon(Icons.logout), onPressed: () => Navigator.pop(context))],
+        title: Text("${widget.username} méhese 🐝"),
+        backgroundColor: Colors.amber,
+        actions: [IconButton(icon: const Icon(Icons.logout), onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage())))],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _noteController,
-                    decoration: const InputDecoration(
-                      hintText: "Írj vagy diktálj...",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Mikrofon gomb
-                CircleAvatar(
-                  backgroundColor: _isListening ? Colors.red : Colors.blue,
-                  child: IconButton(
-                    icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: Colors.white),
-                    onPressed: _listen,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Mentés gomb
-                CircleAvatar(
-                  backgroundColor: Colors.green,
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _addNote,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: notes.length,
+      body: hives.isEmpty
+          ? const Center(child: Text("Még nincs kaptárad. Adj hozzá egyet!"))
+          : ListView.builder(
+              itemCount: hives.length,
               itemBuilder: (context, index) => Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                margin: const EdgeInsets.all(8),
                 child: ListTile(
-                  leading: const Icon(Icons.notes),
-                  title: Text(notes[index]['content'] ?? ""),
-                  subtitle: Text(notes[index]['created_at']?.toString().substring(0, 10) ?? ""),
+                  leading: const Icon(Icons.settings_input_component, color: Colors.amber),
+                  title: Text(hives[index]),
+                  trailing: const Icon(Icons.edit_note),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => NotePage(hiveName: hives[index], username: widget.username))),
                 ),
               ),
             ),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(onPressed: _addHive, backgroundColor: Colors.amber, child: const Icon(Icons.add)),
+    );
+  }
+}
+
+// --- JEGYZET OLDAL ---
+class NotePage extends StatefulWidget {
+  final String hiveName;
+  final String username;
+  const NotePage({super.key, required this.hiveName, required this.username});
+  @override
+  State<NotePage> createState() => _NotePageState();
+}
+
+class _NotePageState extends State<NotePage> {
+  final _noteController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNote();
+  }
+
+  void _loadNote() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _noteController.text = prefs.getString('note_${widget.username}_${widget.hiveName}') ?? "";
+    });
+  }
+
+  void _saveNote() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('note_${widget.username}_${widget.hiveName}', _noteController.text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Jegyzet mentve!")));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.hiveName), backgroundColor: Colors.amber),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            const Text("Kaptár állapota, megjegyzések:", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: TextField(
+                controller: _noteController,
+                maxLines: null,
+                expands: true,
+                decoration: const InputDecoration(hintText: "Írj ide valamit...", border: OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(onPressed: _saveNote, icon: const Icon(Icons.save), label: const Text("MENTÉS"), style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50))),
+          ],
+        ),
       ),
     );
   }
