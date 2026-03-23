@@ -1,0 +1,58 @@
+name: bee_log_pro
+description: "Bee-Log Pro - Professzionális méhészeti napló és elemző alkalmazás."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.1.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Ikonok
+  cupertino_icons: ^1.0.8
+
+  # Adatbázis (SQLite)
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  
+  # EZ KELL A CHROME TESZTHEZ (bár Androidra fókuszálunk, ezek maradhatnak):
+  sqflite_common_ffi: ^2.3.1
+  sqflite_common_ffi_web: ^0.4.0
+
+  # Beszédvezérlés - A 7.3.0 tökéletes az onDevice funkcióhoz!
+  speech_to_text: ^7.3.0
+
+  # Egyéb hasznos apróságok
+  shared_preferences: ^2.2.0
+  http: ^1.2.0
+  # Javított verzió a stabilitásért:
+  intl: ^0.19.0 
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  # Ez a csomag generálja le az ikonokat minden méretben
+  flutter_launcher_icons: ^0.13.1
+
+# Ikon konfiguráció
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFB300"
+  adaptive_icon_foreground: "assets/app_icon.png"
+
+flutter:
+  uses-material-design: true
+
+  # Eszközök (Ikon és Adatbázis)
+  assets:
+    - assets/app_icon.png
+    # Ha tényleg van előre gyártott adatbázisod, hagyd bent, 
+    # de ha csak a kódból hozod létre, ezt a sort törölheted:
+    # - assets/beekeeping.db
